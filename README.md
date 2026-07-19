@@ -4,7 +4,7 @@ This is the upgraded version of the tool: a small Express server backed by Postg
 
 ## Deploy to Render (manual — no Blueprint)
 
-`render.yaml` in this folder is unused for this path — you can ignore or delete it. These steps create the database and the web service one at a time in the dashboard instead.
+These steps create the database and the web service one at a time in the dashboard.
 
 1. Push this folder to a GitHub (or GitLab) repo.
    ```
