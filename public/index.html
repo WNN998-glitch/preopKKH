@@ -95,9 +95,9 @@
   <button id="refreshBtn" title="Pull the latest data from the server">Refresh</button>
   <span id="toolbar-elective" style="display:flex;gap:8px;align-items:center;">
     <label class="upload-btn">Upload Room File(s)<input type="file" id="fileInput" multiple accept=".xlsx,.xls" style="display:none;"></label>
-    <select id="sortMode" title="Sort patients within each room">
-      <option value="time">Sort: Time</option>
-      <option value="ward">Sort: Ward</option>
+    <select id="sortMode" title="How to group the patient list">
+      <option value="room">Group: By Room</option>
+      <option value="ward">Group: By Ward (all rooms)</option>
     </select>
     <button class="danger" id="clearListBtn">Clear List</button>
   </span>
@@ -244,17 +244,7 @@ function handleFiles(fileList){
   });
 }
 
-let electiveSortMode = 'time'; // 'time' or 'ward'
-
-function sortPatients(patients, sortMode){
-  return [...patients].sort((a,b)=>{
-    if(sortMode === 'ward'){
-      const w = (a.ward||'').localeCompare(b.ward||'', 'th');
-      if(w !== 0) return w;
-    }
-    return (a.time||'').localeCompare(b.time||'');
-  });
-}
+let electiveSortMode = 'room'; // 'room' (grouped per room, by time) or 'ward' (all rooms mixed, grouped by ward)
 
 function renderElective(){
   const el = elective;
@@ -266,12 +256,18 @@ function renderElective(){
     return;
   }
 
-  const colCount = 10 + ELECTIVE_CHECK_ITEMS.length + 1;
+  if(electiveSortMode === 'ward') renderElectiveByWard(panel, el, roomKeys);
+  else renderElectiveByRoom(panel, el, roomKeys);
+
+  attachElectiveHandlers(panel);
+}
+
+// Default view: one table per OR room, patients sorted by time — matches the room export files.
+function renderElectiveByRoom(panel, el, roomKeys){
   let html = '';
   roomKeys.forEach(roomKey=>{
     const roomData = el.rooms[roomKey];
-    const patients = sortPatients(roomData.patients, electiveSortMode);
-    let lastWard = null;
+    const patients = [...roomData.patients].sort((a,b)=> (a.time||'').localeCompare(b.time||''));
     html += `<section class="card">
       <h2 style="display:flex;justify-content:space-between;align-items:center;">
         <span>${roomData.room}</span>
@@ -287,30 +283,71 @@ function renderElective(){
           <th></th>
         </tr></thead>
         <tbody>
-        ${patients.map(p=>{
-          let groupHeader = '';
-          if(electiveSortMode === 'ward' && p.ward !== lastWard){
-            lastWard = p.ward;
-            groupHeader = `<tr class="ward-group-row"><td colspan="${colCount}">${p.ward || '(no ward listed)'}</td></tr>`;
-          }
-          const key = patientKey(p);
-          const checks = el.checks[key] || {};
-          const allDone = ELECTIVE_CHECK_ITEMS.every(it=>checks[it.id]);
-          return groupHeader + `<tr id="row-${cssEscape(key)}" class="${allDone?'row-complete':''}">
-            <td>${p.time}</td><td>${p.hn}</td><td>${p.name}</td><td>${p.age}</td><td>${p.ward}</td>
-            <td>${p.diagnosis}</td><td>${p.procedure}</td><td>${p.surgeon}</td><td>${p.anesthesia}</td><td>${p.npo}</td>
-            ${ELECTIVE_CHECK_ITEMS.map(it=>`<td class="chk"><input type="checkbox" data-key="${escapeAttr(key)}" data-item="${it.id}" ${checks[it.id]?'checked':''}></td>`).join('')}
-            <td class="chk"><button type="button" class="row-del-btn" data-room-key="${escapeAttr(roomKey)}" data-patient-key="${escapeAttr(key)}" title="Remove this patient">✕</button></td>
-          </tr>`;
-        }).join('')}
+        ${patients.map(p=> patientRowHtml(p, roomKey, el)).join('')}
         </tbody>
       </table>
       </div>
     </section>`;
   });
-
   panel.innerHTML = html;
+}
 
+// Ward view: every patient from every room mixed into one list, grouped by ward — for walking
+// ward-to-ward and checking everyone there regardless of which OR room they're booked into.
+function renderElectiveByWard(panel, el, roomKeys){
+  let allPatients = [];
+  roomKeys.forEach(roomKey=>{
+    const roomData = el.rooms[roomKey];
+    roomData.patients.forEach(p=> allPatients.push({...p, roomKey, roomName: roomData.room}));
+  });
+  allPatients.sort((a,b)=>{
+    const w = (a.ward||'').localeCompare(b.ward||'', 'th');
+    if(w !== 0) return w;
+    return (a.time||'').localeCompare(b.time||'');
+  });
+
+  const colCount = 11 + ELECTIVE_CHECK_ITEMS.length + 1; // +Room column vs. the per-room view
+  let lastWard = null;
+  const rowsHtml = allPatients.map(p=>{
+    let groupHeader = '';
+    if(p.ward !== lastWard){
+      lastWard = p.ward;
+      groupHeader = `<tr class="ward-group-row"><td colspan="${colCount}">${p.ward || '(no ward listed)'}</td></tr>`;
+    }
+    return groupHeader + patientRowHtml(p, p.roomKey, el, true);
+  }).join('');
+
+  panel.innerHTML = `<section class="card">
+    <h2>All Rooms — Grouped by Ward</h2>
+    <div class="room-meta">${allPatients.length} case(s) across ${roomKeys.length} room(s)</div>
+    <div style="overflow-x:auto;">
+    <table class="plist">
+      <thead><tr>
+        <th>Time</th><th>HN</th><th>Name</th><th>Age</th><th>Ward</th><th>Room</th>
+        <th>Diagnosis</th><th>Procedure</th><th>Surgeon</th><th>Anesthesia</th><th>NPO</th>
+        ${ELECTIVE_CHECK_ITEMS.map(it=>`<th>${it.label}</th>`).join('')}
+        <th></th>
+      </tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    </div>
+  </section>`;
+}
+
+function patientRowHtml(p, roomKey, el, showRoomCol){
+  const key = patientKey(p);
+  const checks = el.checks[key] || {};
+  const allDone = ELECTIVE_CHECK_ITEMS.every(it=>checks[it.id]);
+  return `<tr id="row-${cssEscape(key)}" class="${allDone?'row-complete':''}">
+    <td>${p.time}</td><td>${p.hn}</td><td>${p.name}</td><td>${p.age}</td><td>${p.ward}</td>
+    ${showRoomCol ? `<td>${p.roomName}</td>` : ''}
+    <td>${p.diagnosis}</td><td>${p.procedure}</td><td>${p.surgeon}</td><td>${p.anesthesia}</td><td>${p.npo}</td>
+    ${ELECTIVE_CHECK_ITEMS.map(it=>`<td class="chk"><input type="checkbox" data-key="${escapeAttr(key)}" data-item="${it.id}" ${checks[it.id]?'checked':''}></td>`).join('')}
+    <td class="chk"><button type="button" class="row-del-btn" data-room-key="${escapeAttr(roomKey)}" data-patient-key="${escapeAttr(key)}" title="Remove this patient">✕</button></td>
+  </tr>`;
+}
+
+function attachElectiveHandlers(panel){
   panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('change', async ()=>{
       const key = cb.dataset.key, item = cb.dataset.item;
