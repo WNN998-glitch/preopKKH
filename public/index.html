@@ -20,6 +20,7 @@
   .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);background:#eef4fb;}
   .toolbar{display:flex;gap:8px;padding:10px 24px;background:#fff;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center;}
   .toolbar button, .toolbar label.upload-btn{border:1px solid var(--border);background:#fff;padding:7px 14px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--text);}
+  .toolbar select{border:1px solid var(--border);background:#fff;padding:7px 10px;border-radius:6px;font-size:13px;color:var(--text);}
   .toolbar button.primary{background:var(--blue);color:#fff;border-color:var(--blue);}
   .toolbar button.danger{color:var(--red);border-color:var(--red);}
   .toolbar label.upload-btn{background:#eef4fb;color:var(--blue-dark);border-color:var(--blue);font-weight:600;}
@@ -59,6 +60,7 @@
   table.plist td.chk input{width:16px;height:16px;cursor:pointer;}
   table.plist tr.row-complete{background:#f3fbf6;}
   table.plist tr:target, table.plist tr.jump-highlight{outline:2px solid var(--blue);}
+  table.plist tr.ward-group-row td{background:#eef4fb;font-weight:700;color:var(--blue-dark);border-top:2px solid var(--blue);padding:5px 8px;}
   .row-del-btn{border:1px solid var(--border);background:#fff;color:var(--red);border-radius:5px;width:22px;height:22px;line-height:1;cursor:pointer;font-size:13px;}
   .row-del-btn:hover{background:#fdecec;border-color:var(--red);}
   .room-del-btn{border:1px solid var(--border);background:#fff;color:var(--red);border-radius:6px;padding:4px 10px;font-size:11.5px;cursor:pointer;}
@@ -93,6 +95,10 @@
   <button id="refreshBtn" title="Pull the latest data from the server">Refresh</button>
   <span id="toolbar-elective" style="display:flex;gap:8px;align-items:center;">
     <label class="upload-btn">Upload Room File(s)<input type="file" id="fileInput" multiple accept=".xlsx,.xls" style="display:none;"></label>
+    <select id="sortMode" title="Sort patients within each room">
+      <option value="time">Sort: Time</option>
+      <option value="ward">Sort: Ward</option>
+    </select>
     <button class="danger" id="clearListBtn">Clear List</button>
   </span>
   <span id="toolbar-anes" style="display:none;gap:8px;align-items:center;">
@@ -238,6 +244,18 @@ function handleFiles(fileList){
   });
 }
 
+let electiveSortMode = 'time'; // 'time' or 'ward'
+
+function sortPatients(patients, sortMode){
+  return [...patients].sort((a,b)=>{
+    if(sortMode === 'ward'){
+      const w = (a.ward||'').localeCompare(b.ward||'', 'th');
+      if(w !== 0) return w;
+    }
+    return (a.time||'').localeCompare(b.time||'');
+  });
+}
+
 function renderElective(){
   const el = elective;
   const panel = document.getElementById('elective-panel');
@@ -248,10 +266,12 @@ function renderElective(){
     return;
   }
 
+  const colCount = 10 + ELECTIVE_CHECK_ITEMS.length + 1;
   let html = '';
   roomKeys.forEach(roomKey=>{
     const roomData = el.rooms[roomKey];
-    const patients = [...roomData.patients].sort((a,b)=> (a.time||'').localeCompare(b.time||''));
+    const patients = sortPatients(roomData.patients, electiveSortMode);
+    let lastWard = null;
     html += `<section class="card">
       <h2 style="display:flex;justify-content:space-between;align-items:center;">
         <span>${roomData.room}</span>
@@ -268,10 +288,15 @@ function renderElective(){
         </tr></thead>
         <tbody>
         ${patients.map(p=>{
+          let groupHeader = '';
+          if(electiveSortMode === 'ward' && p.ward !== lastWard){
+            lastWard = p.ward;
+            groupHeader = `<tr class="ward-group-row"><td colspan="${colCount}">${p.ward || '(no ward listed)'}</td></tr>`;
+          }
           const key = patientKey(p);
           const checks = el.checks[key] || {};
           const allDone = ELECTIVE_CHECK_ITEMS.every(it=>checks[it.id]);
-          return `<tr id="row-${cssEscape(key)}" class="${allDone?'row-complete':''}">
+          return groupHeader + `<tr id="row-${cssEscape(key)}" class="${allDone?'row-complete':''}">
             <td>${p.time}</td><td>${p.hn}</td><td>${p.name}</td><td>${p.age}</td><td>${p.ward}</td>
             <td>${p.diagnosis}</td><td>${p.procedure}</td><td>${p.surgeon}</td><td>${p.anesthesia}</td><td>${p.npo}</td>
             ${ELECTIVE_CHECK_ITEMS.map(it=>`<td class="chk"><input type="checkbox" data-key="${escapeAttr(key)}" data-item="${it.id}" ${checks[it.id]?'checked':''}></td>`).join('')}
@@ -664,6 +689,11 @@ document.getElementById('clearListBtn').addEventListener('click', async ()=>{
 document.getElementById('fileInput').addEventListener('change', (e)=>{
   handleFiles(e.target.files);
   e.target.value = '';
+});
+
+document.getElementById('sortMode').addEventListener('change', (e)=>{
+  electiveSortMode = e.target.value;
+  renderElective();
 });
 
 document.getElementById('refreshBtn').addEventListener('click', ()=>{

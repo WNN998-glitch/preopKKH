@@ -2,7 +2,9 @@
 
 This is the upgraded version of the tool: a small Express server backed by Postgres, so the Elective Preop room lists, checkmarks, and the Anesthesia Preop form are stored on the server instead of one browser's local storage. Open the same URL from any computer and you see the same data — solves the "wrong computer, no printer" problem, and is the same foundation your team will use to check items together.
 
-## Deploy to Render
+## Deploy to Render (manual — no Blueprint)
+
+`render.yaml` in this folder is unused for this path — you can ignore or delete it. These steps create the database and the web service one at a time in the dashboard instead.
 
 1. Push this folder to a GitHub (or GitLab) repo.
    ```
@@ -13,11 +15,28 @@ This is the upgraded version of the tool: a small Express server backed by Postg
    git remote add origin <your-repo-url>
    git push -u origin main
    ```
-2. Render dashboard → **New** → **Blueprint** → connect the repo.
-3. Render reads `render.yaml` and provisions two things automatically:
-   - A **Postgres database** (`preop-checklist-db`)
-   - A **web service** (`preop-checklist-app`) wired to that database via `DATABASE_URL`
-4. Click **Apply**. First deploy takes a few minutes. You'll get a URL like `https://preop-checklist-app.onrender.com` — that's the one link everyone opens.
+   (Double-check on GitHub afterward that `package.json` and `server.js` show up with their full names — Windows has been truncating filenames on this push in the past.)
+
+2. **Create the database first.**
+   - Go to [dashboard.render.com/new/database](https://dashboard.render.com/new/database) (or **New +** → **Postgres**).
+   - Name it something like `preop-checklist-db`, pick a region, choose an instance type (Free is fine to start — see the durability note below), and click **Create Database**.
+   - Wait for its status to show **Available**.
+   - On the database's **Info** page, find the **Internal Database URL** under **Connect** — copy it. (Use the *internal* one, not external — it's faster and free, since the web service and database will run in the same region.)
+
+3. **Create the web service.**
+   - **New +** → **Web Service** → connect your GitHub repo.
+   - **Name:** `preop-checklist-app` (or whatever you like).
+   - **Region:** same region you picked for the database.
+   - **Language/Runtime:** Node.
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+   - Instance type: Free to start, or a paid tier if you want to skip the spin-down delay.
+   - Open **Advanced** → **Add Environment Variable**:
+     - Key: `DATABASE_URL`
+     - Value: paste the Internal Database URL you copied in step 2.
+   - Click **Create Web Service**.
+
+4. Render builds and deploys. First deploy takes a few minutes. You'll get a URL like `https://preop-checklist-app.onrender.com` — that's the one link everyone opens.
 
 ## Two things to decide before real use
 
