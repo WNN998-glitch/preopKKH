@@ -246,13 +246,33 @@ function handleFiles(fileList){
 
 let electiveSortMode = 'room'; // 'room' (grouped per room, by time) or 'ward' (all rooms mixed, grouped by ward)
 
+// Re-rendering replaces the table DOM, which would normally reset both the page's vertical
+// scroll and each table's horizontal scroll (the thing you scroll to reach the checkboxes on
+// a phone). These two helpers snapshot scroll positions before a re-render and put them back
+// after, so a background sync never yanks you back to the left edge / top of the page.
+function captureElectiveScroll(panel){
+  const state = { windowY: window.scrollY, tables: {} };
+  panel.querySelectorAll('[data-scroll-id]').forEach(elx=>{
+    state.tables[elx.dataset.scrollId] = elx.scrollLeft;
+  });
+  return state;
+}
+function restoreElectiveScroll(panel, state){
+  panel.querySelectorAll('[data-scroll-id]').forEach(elx=>{
+    if(state.tables[elx.dataset.scrollId] !== undefined) elx.scrollLeft = state.tables[elx.dataset.scrollId];
+  });
+  window.scrollTo(window.scrollX, state.windowY);
+}
+
 function renderElective(){
   const el = elective;
   const panel = document.getElementById('elective-panel');
   const roomKeys = Object.keys(el.rooms).sort();
+  const scrollState = captureElectiveScroll(panel);
 
   if(roomKeys.length === 0){
     panel.innerHTML = `<div class="empty-state">No patient list loaded yet.<br>Click <strong>Upload Room File(s)</strong> above and select today's room export(s).</div>`;
+    window.scrollTo(window.scrollX, scrollState.windowY);
     return;
   }
 
@@ -260,6 +280,7 @@ function renderElective(){
   else renderElectiveByRoom(panel, el, roomKeys);
 
   attachElectiveHandlers(panel);
+  restoreElectiveScroll(panel, scrollState);
 }
 
 // Default view: one table per OR room, patients sorted by time — matches the room export files.
@@ -274,7 +295,7 @@ function renderElectiveByRoom(panel, el, roomKeys){
         <button type="button" class="room-del-btn" data-room-key="${escapeAttr(roomKey)}" title="Remove this room's list">Remove room</button>
       </h2>
       <div class="room-meta">${roomData.date} &middot; ${patients.length} case(s)</div>
-      <div style="overflow-x:auto;">
+      <div style="overflow-x:auto;" data-scroll-id="${escapeAttr(roomKey)}">
       <table class="plist">
         <thead><tr>
           <th>Time</th><th>HN</th><th>Name</th><th>Age</th><th>Ward</th>
@@ -320,7 +341,7 @@ function renderElectiveByWard(panel, el, roomKeys){
   panel.innerHTML = `<section class="card">
     <h2>All Rooms — Grouped by Ward</h2>
     <div class="room-meta">${allPatients.length} case(s) across ${roomKeys.length} room(s)</div>
-    <div style="overflow-x:auto;">
+    <div style="overflow-x:auto;" data-scroll-id="ward-view">
     <table class="plist">
       <thead><tr>
         <th>Time</th><th>HN</th><th>Name</th><th>Age</th><th>Ward</th><th>Room</th>
@@ -547,11 +568,13 @@ function saveAnesDebounced(){
 async function refreshAnes(){
   // Skip if the user is actively typing in the anes form, so we don't clobber them mid-edit.
   if(document.getElementById('anes-panel').contains(document.activeElement)) return;
+  const savedY = window.scrollY;
   try{
     data = await api('GET', '/api/anes') || {};
     renderPanel(anesConfig, 'anes');
     updateBMI();
     if(document.querySelector('.tab-btn.active').dataset.tab === 'anes') renderSummary();
+    window.scrollTo(window.scrollX, savedY);
   }catch(err){
     setStatus('Sync error — will retry', true);
   }
