@@ -498,6 +498,13 @@ const anesConfig = [
     {id:'a_anes_plan', label:'Anesthetic Technique Planned', type:'text'},
     {id:'a_asa', label:'ASA Classification', type:'select', options:['I','II','III','IV','V','VI','I-E','II-E','III-E','IV-E','V-E']},
   ]},
+  { title: "Vital Signs", fields: [
+    {id:'a_vs_bp', label:'Blood Pressure (mmHg)', type:'text'},
+    {id:'a_vs_hr', label:'Heart Rate (bpm)', type:'text'},
+    {id:'a_vs_rr', label:'Respiratory Rate (/min)', type:'text'},
+    {id:'a_vs_temp', label:'Temperature (°C)', type:'text'},
+    {id:'a_vs_spo2', label:'SpO2 (%)', type:'text'},
+  ]},
   { title: "Allergy & NPO", fields: [
     {id:'a_allergy', label:'Drug / Food Allergies', type:'text'},
     {id:'a_npo_time', label:'NPO Since (time)', type:'text'},
@@ -511,6 +518,8 @@ const anesConfig = [
     {id:'a_mouth_opening', label:'Mouth Opening', type:'text'},
     {id:'a_thyromental', label:'Thyromental Distance', type:'text'},
     {id:'a_dentition', label:'Dentition', type:'text'},
+    {id:'a_ett_no', label:'ETT No.', type:'text'},
+    {id:'a_ett_mark', label:'ETT Mark (depth)', type:'text'},
     {id:'a_airway_notes', label:'Other Airway Notes', type:'text', full:true},
   ]},
   { title: "Laboratory", fields: [
@@ -524,6 +533,7 @@ const anesConfig = [
     {id:'a_ptt', label:'PTT', type:'text'},
     {id:'a_inr', label:'INR', type:'text'},
     {id:'a_bloodgroup', label:'Blood Group & Crossmatch (units)', type:'text'},
+    {id:'a_group_match', label:'Group Match (Crossmatch Result)', type:'text'},
   ]},
   { title: "Imaging & Cardiac", fields: [
     {id:'a_cxr', label:'CXR Findings', type:'text'},
